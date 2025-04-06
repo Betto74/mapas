@@ -4,8 +4,10 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.location.Geocoder
 import android.os.Bundle
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -18,7 +20,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -62,6 +66,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
 import retrofit2.http.Query
+import java.util.Locale
 
 class MainActivity : ComponentActivity() {
     private lateinit var fusedLocationClient: FusedLocationProviderClient
@@ -218,7 +223,7 @@ class MainActivity : ComponentActivity() {
                         onClick = { getCurrentLocation() },
                         modifier = Modifier.padding(bottom = 8.dp)
                     ) {
-                        Icon(Icons.Default.Check, contentDescription = "Obtener ubicación actual")
+                        Icon(Icons.Default.AccountCircle, contentDescription = "Obtener ubicación actual")
                     }
 
                     // Botón para calcular ruta
@@ -226,7 +231,7 @@ class MainActivity : ComponentActivity() {
                         onClick = { calculateRoute() },
                         modifier = Modifier.padding(bottom = 8.dp)
                     ) {
-                        Icon(Icons.Default.Home, contentDescription = "Calcular ruta")
+                        Icon(Icons.Default.Check, contentDescription = "Calcular ruta")
                     }
 
                     // Botón para configurar dirección
@@ -238,6 +243,7 @@ class MainActivity : ComponentActivity() {
                     ) {
                         Icon(Icons.Default.Home, contentDescription = "Configurar dirección")
                     }
+
                 }
             }
         ) { innerPadding ->
@@ -271,29 +277,37 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Diálogo para configurar dirección
+        // Diálogo para configurar dirección con Geocoder
         if (showDialog) {
             AlertDialog(
                 onDismissRequest = { showDialog = false },
                 title = { Text("Configurar dirección de casa") },
                 text = {
                     Column {
-                        Text("Ingresa las coordenadas de tu casa (latitud,longitud):")
+                        Text("Ingresa la dirección de tu casa:")
                         TextField(
                             value = tempAddress,
                             onValueChange = { tempAddress = it },
                             modifier = Modifier.fillMaxWidth()
                         )
                         Text(
-                            "Ejemplo: 19.432608,-99.133209",
+                            "Ejemplo: Av. Reforma 123, Ciudad de México",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
                 },
                 confirmButton = {
                     Button(onClick = {
-                        homeAddress = tempAddress
-                        showDialog = false
+                        geocodeAddress(context, tempAddress) { geoPoint ->
+                            if (geoPoint != null) {
+                                // Guardar latitud y longitud como string
+                                homeAddress = "${geoPoint.latitude},${geoPoint.longitude}"
+                            } else {
+                                // No se encontró la dirección
+                                Toast.makeText(context, "No se encontró la dirección", Toast.LENGTH_SHORT).show()
+                            }
+                            showDialog = false
+                        }
                     }) {
                         Text("Guardar")
                     }
@@ -305,6 +319,7 @@ class MainActivity : ComponentActivity() {
                 }
             )
         }
+
     }
 
     @Composable
@@ -370,6 +385,27 @@ class MainActivity : ComponentActivity() {
         )
     }
 }
+
+fun geocodeAddress(context: Context, address: String, onResult: (GeoPoint?) -> Unit) {
+    val geocoder = Geocoder(context, Locale.getDefault())
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            val addresses = geocoder.getFromLocationName(address, 1)
+            addresses?.firstOrNull()?.let {
+                withContext(Dispatchers.Main) {
+                    onResult(GeoPoint(it.latitude, it.longitude))
+                }
+            } ?: onResult(null)
+        } catch (e: Exception) {
+            withContext(Dispatchers.Main) {
+
+                onResult(null)
+            }
+        }
+    }
+}
+
+
 @Preview(showBackground = true)
 @Composable
 fun GreetingPreview() {
